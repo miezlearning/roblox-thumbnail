@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/avatar/:type/:userId",
+      "destination": "/api/index"
+    }
+  ]
+}
