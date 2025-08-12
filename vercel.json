@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/avatar/:type/:userId",
-      "destination": "/api/index"
+      "destination": "/api/index?type=:type&userId=:userId"
     }
   ]
 }
