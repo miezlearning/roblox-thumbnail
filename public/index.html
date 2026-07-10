@@ -3,41 +3,35 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Roblox Avatar Explorer — Search by Username or ID</title>
+  <title>Roview — Explore Roblox Avatars in HD</title>
   <meta name="description" content="Explore Roblox avatars in HD. Search by username or user ID. View headshot, bust, and full body thumbnails. Download avatars instantly.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Animated Background -->
-  <div class="bg-orbs">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
-    <div class="orb orb-4"></div>
-  </div>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="navbar-container">
+      <a href="#" class="navbar-logo">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" class="brand-logo-svg">
+          <circle cx="16" cy="16" r="16" fill="#1ed760"/>
+          <path d="M12 22V10L22 16L12 22Z" fill="#121212"/>
+        </svg>
+        <span class="brand-title">Roview</span>
+      </a>
+      <span class="navbar-subtitle">Roblox Database Integration</span>
+    </div>
+  </nav>
 
   <div class="app">
-    <!-- Header -->
-    <header class="header">
-      <div class="logo">
-        <div class="logo-icon">
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-            <rect x="2" y="2" width="28" height="28" rx="6" fill="url(#logoGrad)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
-            <path d="M10 16L14 20L22 12" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <defs>
-              <linearGradient id="logoGrad" x1="2" y1="2" x2="30" y2="30">
-                <stop stop-color="#6366f1"/>
-                <stop offset="1" stop-color="#8b5cf6"/>
-              </linearGradient>
-            </defs>
-          </svg>
-        </div>
-        <h1>Roblox Avatar Explorer</h1>
+    <!-- Hero / Header Section -->
+    <header class="hero-section">
+      <div class="hero-content">
+        <h2>Roview</h2>
+        <p class="subtitle">Search by <span class="highlight">Username</span> or <span class="highlight">User ID</span> — Powered by 8 Roblox APIs</p>
       </div>
-      <p class="subtitle">Search by <span class="highlight">Username</span> or <span class="highlight">User ID</span> — Powered by 8 Roblox APIs</p>
     </header>
 
     <!-- Search Section -->
@@ -50,7 +44,7 @@
               <path d="m21 21-4.35-4.35"/>
             </svg>
           </div>
-          <input type="text" id="searchInput" placeholder="Enter username or User ID..." autocomplete="off" spellcheck="false">
+          <input type="text" id="searchInput" placeholder="Search usernames or user IDs..." autocomplete="off" spellcheck="false">
           <div class="input-type-badge" id="inputBadge">
             <span id="badgeText">USERNAME</span>
           </div>
@@ -69,7 +63,7 @@
               <circle cx="11" cy="11" r="8"/>
               <path d="m21 21-4.35-4.35"/>
             </svg>
-            <span>Search</span>
+            <span>SEARCH</span>
           </button>
         </div>
       </div>
@@ -90,7 +84,7 @@
       <div class="error-card glass-card">
         <div class="error-icon">⚠️</div>
         <p id="errorMessage">Something went wrong</p>
-        <button class="btn-secondary" onclick="document.getElementById('errorState').classList.add('hidden')">Dismiss</button>
+        <button class="btn-secondary" onclick="document.getElementById('errorState').classList.add('hidden')">DISMISS</button>
       </div>
     </div>
 
@@ -139,11 +133,11 @@
             <div class="card-image-wrapper">
               <img id="headshotImg" src="" alt="Headshot">
               <div class="card-overlay">
-                <button class="btn-icon" onclick="downloadImage('headshotImg', 'headshot')" title="Download">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <button class="play-btn" onclick="downloadImage('headshotImg', 'headshot')" title="Download Image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 </button>
-                <button class="btn-icon" onclick="openFullscreen('headshotImg')" title="Fullscreen">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,3 21,3 21,9"/><polyline points="9,21 3,21 3,15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                <button class="play-btn secondary" onclick="openFullscreen('headshotImg')" title="Fullscreen View">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15,3 21,3 21,9"/><polyline points="9,21 3,21 3,15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
                 </button>
               </div>
             </div>
@@ -156,11 +150,11 @@
             <div class="card-image-wrapper">
               <img id="bustImg" src="" alt="Bust">
               <div class="card-overlay">
-                <button class="btn-icon" onclick="downloadImage('bustImg', 'bust')" title="Download">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <button class="play-btn" onclick="downloadImage('bustImg', 'bust')" title="Download Image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 </button>
-                <button class="btn-icon" onclick="openFullscreen('bustImg')" title="Fullscreen">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,3 21,3 21,9"/><polyline points="9,21 3,21 3,15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                <button class="play-btn secondary" onclick="openFullscreen('bustImg')" title="Fullscreen View">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15,3 21,3 21,9"/><polyline points="9,21 3,21 3,15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
                 </button>
               </div>
             </div>
@@ -173,11 +167,11 @@
             <div class="card-image-wrapper">
               <img id="avatarImg" src="" alt="Full Body Avatar">
               <div class="card-overlay">
-                <button class="btn-icon" onclick="downloadImage('avatarImg', 'fullbody')" title="Download">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <button class="play-btn" onclick="downloadImage('avatarImg', 'fullbody')" title="Download Image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 </button>
-                <button class="btn-icon" onclick="openFullscreen('avatarImg')" title="Fullscreen">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,3 21,3 21,9"/><polyline points="9,21 3,21 3,15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                <button class="play-btn secondary" onclick="openFullscreen('avatarImg')" title="Fullscreen View">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15,3 21,3 21,9"/><polyline points="9,21 3,21 3,15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
                 </button>
               </div>
             </div>
@@ -258,7 +252,7 @@
         <div class="modal-actions">
           <button class="btn-primary" id="modalDownloadBtn">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Download HD
+            DOWNLOAD HD
           </button>
         </div>
       </div>

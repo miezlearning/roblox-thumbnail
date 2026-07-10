@@ -21,6 +21,16 @@ const CONFIG = {
 let currentUserId = null;
 let currentUsername = null;
 let apiCallLog = [];
+let activePolls = {}; // Tracks timeouts for auto-polling pending thumbnails
+
+function clearAllPolls() {
+  Object.keys(activePolls).forEach(type => {
+    if (activePolls[type]) {
+      clearTimeout(activePolls[type]);
+      activePolls[type] = null;
+    }
+  });
+}
 
 // ─── DOM Elements ───
 const searchInput = document.getElementById('searchInput');
@@ -76,6 +86,7 @@ async function performSearch() {
   }
 
   // Reset
+  clearAllPolls();
   apiCallLog = [];
   hideError();
   hideResults();
@@ -300,23 +311,95 @@ function renderThumbnails(headshot, bust, avatar) {
 function renderSingleThumb(type, data) {
   const img = document.getElementById(`${type}Img`);
   const status = document.getElementById(`${type}Status`);
+  const card = document.getElementById(`${type}Card`);
 
   if (data && data.data && data.data[0]) {
     const thumbData = data.data[0];
-    if (thumbData.imageUrl) {
+    
+    // Clear any existing poll for this type
+    if (activePolls[type]) {
+      clearTimeout(activePolls[type]);
+      activePolls[type] = null;
+    }
+
+    if (thumbData.state === 'Completed' && thumbData.imageUrl) {
       img.src = thumbData.imageUrl;
-      status.textContent = `State: ${thumbData.state} • ${sizeSelect.value}`;
-      status.style.color = thumbData.state === 'Completed' ? 'var(--success)' : 'var(--warning)';
+      status.textContent = `State: Completed • ${sizeSelect.value}`;
+      status.style.color = 'var(--accent)'; // Spotify Green for success
+      if (card) card.classList.remove('state-pending');
     } else {
       img.src = '';
-      status.textContent = `State: ${thumbData.state || 'Pending'} — Image rendering...`;
-      status.style.color = 'var(--warning)';
+      const stateName = thumbData.state || 'Pending';
+      status.textContent = `State: ${stateName} • Rendering...`;
+      status.style.color = 'var(--warning)'; // Warning Orange for pending state
+      if (card) card.classList.add('state-pending');
+
+      // Start polling
+      startThumbnailPoll(currentUserId, type, sizeSelect.value);
     }
   } else {
     img.src = '';
     status.textContent = 'Not available';
     status.style.color = 'var(--error)';
+    if (card) card.classList.remove('state-pending');
   }
+}
+
+function startThumbnailPoll(userId, type, size, attempts = 0) {
+  // Max 15 attempts (approx 35 seconds total)
+  if (attempts >= 15) {
+    const status = document.getElementById(`${type}Status`);
+    if (status) {
+      status.textContent = `State: Timeout • Failed to render`;
+      status.style.color = 'var(--error)';
+    }
+    const card = document.getElementById(`${type}Card`);
+    if (card) card.classList.remove('state-pending');
+    return;
+  }
+
+  // Clear previous timeout if any
+  if (activePolls[type]) {
+    clearTimeout(activePolls[type]);
+  }
+
+  activePolls[type] = setTimeout(async () => {
+    // Stop if user context changed in the meantime
+    if (currentUserId !== userId) {
+      return;
+    }
+
+    try {
+      const data = await proxyCall('thumbnail', { userId, type, size });
+      if (data && data.data && data.data[0]) {
+        const thumbData = data.data[0];
+        const img = document.getElementById(`${type}Img`);
+        const status = document.getElementById(`${type}Status`);
+        const card = document.getElementById(`${type}Card`);
+
+        if (thumbData.state === 'Completed' && thumbData.imageUrl) {
+          if (img) img.src = thumbData.imageUrl;
+          if (status) {
+            status.textContent = `State: Completed • ${size}`;
+            status.style.color = 'var(--accent)';
+          }
+          if (card) card.classList.remove('state-pending');
+          activePolls[type] = null;
+        } else {
+          // Still pending, retry
+          if (status) {
+            status.textContent = `State: ${thumbData.state || 'Pending'} • Rendering...`;
+          }
+          startThumbnailPoll(userId, type, size, attempts + 1);
+        }
+      } else {
+        startThumbnailPoll(userId, type, size, attempts + 1);
+      }
+    } catch (e) {
+      console.warn(`Polling error for ${type}:`, e);
+      startThumbnailPoll(userId, type, size, attempts + 1);
+    }
+  }, 2500); // Poll every 2.5s
 }
 
 // ─── Render Currently Wearing ───
