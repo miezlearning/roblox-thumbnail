@@ -10,7 +10,7 @@ module.exports = async (req, res) => {
     return res.status(200).end();
   }
 
-  const { action, userId, username, type, size } = req.query;
+  const { action, userId, username, type, size, groupIds } = req.query;
 
   if (!action) {
     return res.status(400).json({ error: 'Missing action parameter' });
@@ -91,6 +91,101 @@ module.exports = async (req, res) => {
           return res.status(400).json({ error: 'Missing userId parameter' });
         }
         url = `https://avatar.roblox.com/v2/avatar/users/${userId}/avatar`;
+        break;
+      }
+      case 'presence': {
+        if (!userId) {
+          return res.status(400).json({ error: 'Missing userId parameter' });
+        }
+        url = 'https://presence.roblox.com/v1/presence/users';
+        options = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userIds: [parseInt(userId, 10)] })
+        };
+        break;
+      }
+      case 'friends-count': {
+        if (!userId) {
+          return res.status(400).json({ error: 'Missing userId parameter' });
+        }
+        url = `https://friends.roblox.com/v1/users/${userId}/friends/count`;
+        break;
+      }
+      case 'followers-count': {
+        if (!userId) {
+          return res.status(400).json({ error: 'Missing userId parameter' });
+        }
+        url = `https://friends.roblox.com/v1/users/${userId}/followers/count`;
+        break;
+      }
+      case 'followings-count': {
+        if (!userId) {
+          return res.status(400).json({ error: 'Missing userId parameter' });
+        }
+        url = `https://friends.roblox.com/v1/users/${userId}/followings/count`;
+        break;
+      }
+      case 'friends-list': {
+        if (!userId) {
+          return res.status(400).json({ error: 'Missing userId parameter' });
+        }
+        try {
+          const resp = await fetch(`https://friends.roblox.com/v1/users/${userId}/friends`);
+          const friendsData = await resp.json();
+          if (friendsData && friendsData.data && friendsData.data.length > 0) {
+            const slice = friendsData.data.slice(0, 10);
+            const userIds = slice.map(f => f.id);
+            
+            const resolvedResp = await fetch('https://users.roblox.com/v1/users', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userIds, excludeBannedUsers: false })
+            });
+            const resolved = await resolvedResp.json();
+            
+            const userMap = {};
+            if (resolved && resolved.data) {
+              resolved.data.forEach(u => {
+                userMap[u.id] = { name: u.name, displayName: u.displayName };
+              });
+            }
+            
+            slice.forEach(f => {
+              if (userMap[f.id]) {
+                f.name = userMap[f.id].name;
+                f.displayName = userMap[f.id].displayName;
+              }
+            });
+            
+            return res.json({ data: slice });
+          } else {
+            return res.json({ data: [] });
+          }
+        } catch (err) {
+          console.error('[FRIENDS PIPELINE ERROR]', err);
+          return res.status(500).json({ error: 'Friends pipeline error', message: err.message });
+        }
+      }
+      case 'groups': {
+        if (!userId) {
+          return res.status(400).json({ error: 'Missing userId parameter' });
+        }
+        url = `https://groups.roblox.com/v1/users/${userId}/groups/roles`;
+        break;
+      }
+      case 'group-icons': {
+        if (!groupIds) {
+          return res.status(400).json({ error: 'Missing groupIds parameter' });
+        }
+        url = `https://thumbnails.roblox.com/v1/groups/icons?groupIds=${groupIds}&size=150x150&format=Png&isCircular=false`;
+        break;
+      }
+      case 'history': {
+        if (!userId) {
+          return res.status(400).json({ error: 'Missing userId parameter' });
+        }
+        url = `https://users.roblox.com/v1/users/${userId}/username-history?limit=10&sortOrder=Desc`;
         break;
       }
 

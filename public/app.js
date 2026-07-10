@@ -120,7 +120,30 @@ async function performSearch() {
     setLoadingText('Fetching profile & avatars...');
     const size = sizeSelect.value;
 
-    const [profile, headshot, bust, avatar, wearing, details] = await Promise.all([
+    const safeCall = async (action, params) => {
+      try {
+        return await proxyCall(action, params);
+      } catch (e) {
+        console.warn(`Failed safe call to ${action}:`, e);
+        return null;
+      }
+    };
+
+    const [
+      profile,
+      headshot,
+      bust,
+      avatar,
+      wearing,
+      details,
+      presence,
+      friendsCount,
+      followersCount,
+      followingsCount,
+      friendsList,
+      groups,
+      history
+    ] = await Promise.all([
       // API 2: User Profile
       proxyCall('profile', { userId }),
       // API 3: Headshot Thumbnail
@@ -130,9 +153,17 @@ async function performSearch() {
       // API 5: Full Body Thumbnail
       proxyCall('thumbnail', { userId, type: 'avatar', size }),
       // API 7: Currently Wearing
-      proxyCall('wearing', { userId }),
+      safeCall('wearing', { userId }),
       // API 8: Avatar Details
-      proxyCall('avatar-details', { userId })
+      safeCall('avatar-details', { userId }),
+      // New Social APIs
+      safeCall('presence', { userId }),
+      safeCall('friends-count', { userId }),
+      safeCall('followers-count', { userId }),
+      safeCall('followings-count', { userId }),
+      safeCall('friends-list', { userId }),
+      safeCall('groups', { userId }),
+      safeCall('history', { userId })
     ]);
 
     // ─── Also try 3D data (API 6) ───
@@ -149,6 +180,13 @@ async function performSearch() {
     renderThumbnails(headshot, bust, avatar);
     renderWearing(wearing, details);
     renderAvatarDetails(details, avatar3d);
+    
+    // Render extras
+    renderPresenceAndStats(presence, friendsCount, followersCount, followingsCount);
+    renderUsernameHistory(history);
+    renderFriendsList(friendsList);
+    renderGroups(groups);
+
     renderApiLog();
     showResults();
 
@@ -792,4 +830,162 @@ function showResults() {
 
 function hideResults() {
   resultsSection.classList.add('hidden');
+}
+
+// ─── Render Presence & Social Stats ───
+function renderPresenceAndStats(presence, friends, followers, followings) {
+  const dot = document.getElementById('presenceDot');
+  const text = document.getElementById('presenceText');
+
+  if (dot) dot.className = 'presence-dot';
+  if (text) text.className = 'presence-text-badge';
+
+  let presenceType = 0;
+  let locationName = '';
+
+  if (presence && presence.userPresences && presence.userPresences[0]) {
+    const p = presence.userPresences[0];
+    presenceType = p.userPresenceType;
+    locationName = p.lastLocation || '';
+  }
+
+  let statusClass = 'offline';
+  let statusText = 'Offline';
+
+  switch (presenceType) {
+    case 1:
+      statusClass = 'online';
+      statusText = 'Online';
+      break;
+    case 2:
+      statusClass = 'ingame';
+      statusText = locationName ? `Playing: ${locationName}` : 'In-Game';
+      break;
+    case 3:
+      statusClass = 'studio';
+      statusText = 'Developing';
+      break;
+    case 4:
+      statusClass = 'ingame';
+      statusText = 'In-Game (Studio)';
+      break;
+    default:
+      statusClass = 'offline';
+      statusText = 'Offline';
+      break;
+  }
+
+  if (dot) dot.classList.add(statusClass);
+  if (text) {
+    text.textContent = statusText;
+    text.classList.add(statusClass);
+  }
+
+  // Formatting social counts
+  const formatNum = (data) => {
+    return data && typeof data.count === 'number' ? new Intl.NumberFormat('en-US').format(data.count) : '0';
+  };
+
+  const fCount = formatNum(friends);
+  const folCount = formatNum(followers);
+  const folingCount = formatNum(followings);
+
+  const statsEl = document.getElementById('profileSocialStats');
+  if (statsEl) {
+    statsEl.innerHTML = `<span>${fCount}</span> Friends · <span>${folCount}</span> Followers · <span>${folingCount}</span> Following`;
+  }
+}
+
+// ─── Render Username History ───
+function renderUsernameHistory(history) {
+  const container = document.getElementById('usernameHistory');
+  const listEl = document.getElementById('usernameHistoryList');
+  if (!container || !listEl) return;
+
+  if (history && history.data && history.data.length > 0) {
+    const names = history.data.map(item => item.name).join(', ');
+    listEl.textContent = names;
+    container.style.display = 'block';
+  } else {
+    listEl.textContent = 'None';
+    container.style.display = 'block';
+  }
+}
+
+// ─── Render Friends (Related Users) ───
+async function renderFriendsList(friends) {
+  const grid = document.getElementById('friendsGrid');
+  if (!grid) return;
+
+  if (!friends || !friends.data || friends.data.length === 0) {
+    grid.innerHTML = '<p class="placeholder-text">No friends to display</p>';
+    return;
+  }
+
+  // Display top 6 friends
+  const items = friends.data.slice(0, 6);
+  const userIds = items.map(f => f.id).join(',');
+
+  // Set placeholders
+  grid.innerHTML = items.map(f => `
+    <div class="friend-card" onclick="document.getElementById('searchInput').value='${f.id}'; performSearch();">
+      <img class="friend-avatar" id="friend-avatar-${f.id}" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'><rect width='80' height='80' fill='%231f1f1f'/></svg>" alt="${f.displayName}">
+      <span class="friend-display">${f.displayName}</span>
+      <span class="friend-username">@${f.name}</span>
+    </div>
+  `).join('');
+
+  try {
+    const thumbs = await proxyCall('thumbnail', { userId: userIds, type: 'headshot', size: '150x150' });
+    if (thumbs && thumbs.data) {
+      thumbs.data.forEach(t => {
+        const img = document.getElementById(`friend-avatar-${t.targetId}`);
+        if (img && t.imageUrl) {
+          img.src = t.imageUrl;
+        }
+      });
+    }
+  } catch (e) {
+    console.warn('Failed to load friends thumbnails:', e);
+  }
+}
+
+// ─── Render Groups ───
+async function renderGroups(groupsData) {
+  const grid = document.getElementById('groupsGrid');
+  if (!grid) return;
+
+  if (!groupsData || !groupsData.data || groupsData.data.length === 0) {
+    grid.innerHTML = '<p class="placeholder-text">No groups joined</p>';
+    return;
+  }
+
+  // Display top 8 groups
+  const items = groupsData.data.slice(0, 8);
+  const groupIds = items.map(item => item.group.id).join(',');
+
+  // Set placeholders
+  grid.innerHTML = items.map(item => `
+    <div class="group-card" onclick="window.open('https://www.roblox.com/groups/${item.group.id}', '_blank')">
+      <img class="group-icon" id="group-icon-${item.group.id}" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><rect width='48' height='48' fill='%231f1f1f'/></svg>" alt="${item.group.name}">
+      <div class="group-info">
+        <span class="group-name">${item.group.name}</span>
+        <span class="group-role">${item.role.name}</span>
+      </div>
+    </div>
+  `).join('');
+
+  try {
+    const icons = await proxyCall('group-icons', { groupIds });
+    if (icons && icons.data) {
+      icons.data.forEach(icon => {
+        const img = document.getElementById(`group-icon-${icon.targetId}`);
+        if (img && icon.imageUrl) {
+          img.src = icon.imageUrl;
+        }
+      });
+    }
+  } catch (e) {
+    console.warn('Failed to load group icons:', e);
+  }
 }

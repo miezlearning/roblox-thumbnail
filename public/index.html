@@ -30,7 +30,7 @@
     <header class="hero-section">
       <div class="hero-content">
         <h2>Roview</h2>
-        <p class="subtitle">Search by <span class="highlight">Username</span> or <span class="highlight">User ID</span> — Powered by 8 Roblox APIs</p>
+        <p class="subtitle">Search by <span class="highlight">Username</span> or <span class="highlight">User ID</span> — Powered by Roblox APIs</p>
       </div>
     </header>
 
@@ -95,13 +95,26 @@
         <div class="profile-card glass-card">
           <div class="profile-avatar">
             <img id="profileAvatar" src="" alt="Avatar">
-            <div class="profile-avatar-ring"></div>
+            <span id="presenceDot" class="presence-dot offline"></span>
           </div>
           <div class="profile-info">
             <div class="profile-names">
               <h2 id="displayName" class="display-name"></h2>
               <span id="userName" class="username"></span>
+              <span id="presenceText" class="presence-text-badge">Offline</span>
             </div>
+            
+            <!-- Social stats mirroring Spotify artist profile -->
+            <div class="profile-social-stats" id="profileSocialStats">
+              <span id="friendsCount">0 Friends</span> · <span id="followersCount">0 Followers</span> · <span id="followingsCount">0 Following</span>
+            </div>
+            
+            <!-- Username History -->
+            <div class="username-history-container id="usernameHistoryContainer" id="usernameHistory">
+              <span class="history-label">PREVIOUS NAMES:</span>
+              <span id="usernameHistoryList" class="history-list">None</span>
+            </div>
+
             <p id="userDescription" class="user-description"></p>
             <div class="profile-meta">
               <div class="meta-item">
@@ -177,6 +190,28 @@
             </div>
             <div class="card-status" id="avatarStatus"></div>
           </div>
+        </div>
+      </section>
+
+      <!-- Friends Preview Section -->
+      <section class="gallery-section">
+        <h3 class="section-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Friends List (Related Users)
+        </h3>
+        <div id="friendsGrid" class="friends-grid">
+          <p class="placeholder-text">No friends data loaded</p>
+        </div>
+      </section>
+
+      <!-- Groups Joined Section -->
+      <section class="gallery-section">
+        <h3 class="section-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Groups Joined
+        </h3>
+        <div id="groupsGrid" class="groups-grid">
+          <p class="placeholder-text">No groups data loaded</p>
         </div>
       </section>
 
@@ -260,7 +295,7 @@
 
     <!-- Footer -->
     <footer class="footer">
-      <p>Built with 8 Roblox APIs — <a href="https://thumbnails.roblox.com" target="_blank">Thumbnails</a> · <a href="https://users.roblox.com" target="_blank">Users</a> · <a href="https://avatar.roblox.com" target="_blank">Avatar</a></p>
+      <p>Built with Roblox Web APIs — <a href="https://thumbnails.roblox.com" target="_blank">Thumbnails</a> · <a href="https://users.roblox.com" target="_blank">Users</a> · <a href="https://avatar.roblox.com" target="_blank">Avatar</a></p>
       <p class="footer-sub">Not affiliated with Roblox Corporation</p>
     </footer>
   </div>
