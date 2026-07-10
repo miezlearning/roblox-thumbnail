@@ -1,7 +1,7 @@
 {
   "name": "roblox-avatar-proxy",
-  "version": "1.0.0",
-  "main": "index.js",
+  "version": "2.0.0",
+  "main": "api/server.js",
   "dependencies": {
     "node-fetch": "^2.6.7"
   }

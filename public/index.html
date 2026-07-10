@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roblox Avatar Explorer — Search by Username or ID</title>
+  <meta name="description" content="Explore Roblox avatars in HD. Search by username or user ID. View headshot, bust, and full body thumbnails. Download avatars instantly.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Animated Background -->
+  <div class="bg-orbs">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="orb orb-4"></div>
+  </div>
+
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <rect x="2" y="2" width="28" height="28" rx="6" fill="url(#logoGrad)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+            <path d="M10 16L14 20L22 12" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <defs>
+              <linearGradient id="logoGrad" x1="2" y1="2" x2="30" y2="30">
+                <stop stop-color="#6366f1"/>
+                <stop offset="1" stop-color="#8b5cf6"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <h1>Roblox Avatar Explorer</h1>
+      </div>
+      <p class="subtitle">Search by <span class="highlight">Username</span> or <span class="highlight">User ID</span> — Powered by 8 Roblox APIs</p>
+    </header>
+
+    <!-- Search Section -->
+    <section class="search-section">
+      <div class="search-container glass-card">
+        <div class="search-input-wrapper">
+          <div class="search-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.35-4.35"/>
+            </svg>
+          </div>
+          <input type="text" id="searchInput" placeholder="Enter username or User ID..." autocomplete="off" spellcheck="false">
+          <div class="input-type-badge" id="inputBadge">
+            <span id="badgeText">USERNAME</span>
+          </div>
+        </div>
+        <div class="search-controls">
+          <div class="size-selector">
+            <label>Size:</label>
+            <select id="sizeSelect">
+              <option value="150x150">150×150</option>
+              <option value="352x352">352×352</option>
+              <option value="420x420" selected>420×420</option>
+            </select>
+          </div>
+          <button id="searchBtn" class="btn-primary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.35-4.35"/>
+            </svg>
+            <span>Search</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="loading-state hidden">
+      <div class="loader">
+        <div class="loader-ring"></div>
+        <div class="loader-ring"></div>
+        <div class="loader-ring"></div>
+      </div>
+      <p class="loading-text" id="loadingText">Searching...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" class="error-state hidden">
+      <div class="error-card glass-card">
+        <div class="error-icon">⚠️</div>
+        <p id="errorMessage">Something went wrong</p>
+        <button class="btn-secondary" onclick="document.getElementById('errorState').classList.add('hidden')">Dismiss</button>
+      </div>
+    </div>
+
+    <!-- Results Section -->
+    <div id="resultsSection" class="results-section hidden">
+      <!-- Profile Card -->
+      <section class="profile-section">
+        <div class="profile-card glass-card">
+          <div class="profile-avatar">
+            <img id="profileAvatar" src="" alt="Avatar">
+            <div class="profile-avatar-ring"></div>
+          </div>
+          <div class="profile-info">
+            <div class="profile-names">
+              <h2 id="displayName" class="display-name"></h2>
+              <span id="userName" class="username"></span>
+            </div>
+            <p id="userDescription" class="user-description"></p>
+            <div class="profile-meta">
+              <div class="meta-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <span>ID: <strong id="userIdDisplay"></strong></span>
+              </div>
+              <div class="meta-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span>Joined: <strong id="userCreated"></strong></span>
+              </div>
+              <div class="meta-item" id="bannedBadge" style="display:none">
+                <span class="banned-badge">🚫 BANNED</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Thumbnails Gallery -->
+      <section class="gallery-section">
+        <h3 class="section-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+          Avatar Gallery
+        </h3>
+        <div class="gallery-grid">
+          <!-- Headshot -->
+          <div class="gallery-card glass-card" id="headshotCard">
+            <div class="card-label">Headshot</div>
+            <div class="card-image-wrapper">
+              <img id="headshotImg" src="" alt="Headshot">
+              <div class="card-overlay">
+                <button class="btn-icon" onclick="downloadImage('headshotImg', 'headshot')" title="Download">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </button>
+                <button class="btn-icon" onclick="openFullscreen('headshotImg')" title="Fullscreen">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,3 21,3 21,9"/><polyline points="9,21 3,21 3,15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="card-status" id="headshotStatus"></div>
+          </div>
+
+          <!-- Bust -->
+          <div class="gallery-card glass-card" id="bustCard">
+            <div class="card-label">Bust</div>
+            <div class="card-image-wrapper">
+              <img id="bustImg" src="" alt="Bust">
+              <div class="card-overlay">
+                <button class="btn-icon" onclick="downloadImage('bustImg', 'bust')" title="Download">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </button>
+                <button class="btn-icon" onclick="openFullscreen('bustImg')" title="Fullscreen">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,3 21,3 21,9"/><polyline points="9,21 3,21 3,15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="card-status" id="bustStatus"></div>
+          </div>
+
+          <!-- Full Body Avatar -->
+          <div class="gallery-card glass-card" id="avatarCard">
+            <div class="card-label">Full Body</div>
+            <div class="card-image-wrapper">
+              <img id="avatarImg" src="" alt="Full Body Avatar">
+              <div class="card-overlay">
+                <button class="btn-icon" onclick="downloadImage('avatarImg', 'fullbody')" title="Download">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </button>
+                <button class="btn-icon" onclick="openFullscreen('avatarImg')" title="Fullscreen">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,3 21,3 21,9"/><polyline points="9,21 3,21 3,15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="card-status" id="avatarStatus"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Avatar Details Section -->
+      <section class="details-section">
+        <div class="details-grid">
+          <!-- Currently Wearing -->
+          <div class="details-card glass-card">
+            <h3 class="section-title">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.38 3.46L16 2 12 5.46 8 2 3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg>
+              Currently Wearing
+            </h3>
+            <div id="wearingList" class="wearing-list">
+              <p class="placeholder-text">No data loaded</p>
+            </div>
+          </div>
+
+          <!-- Body Colors -->
+          <div class="details-card glass-card">
+            <h3 class="section-title">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="19" cy="11.5" r="2.5"/><circle cx="17" cy="18" r="2.5"/><circle cx="8.5" cy="18" r="2.5"/><circle cx="5" cy="11.5" r="2.5"/></svg>
+              Body Colors
+            </h3>
+            <div id="bodyColors" class="body-colors">
+              <p class="placeholder-text">No data loaded</p>
+            </div>
+          </div>
+
+          <!-- Avatar Scales -->
+          <div class="details-card glass-card">
+            <h3 class="section-title">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 3H3v18h18V3z"/><path d="M3 9h18"/><path d="M9 3v18"/></svg>
+              Avatar Scales
+            </h3>
+            <div id="avatarScales" class="avatar-scales">
+              <p class="placeholder-text">No data loaded</p>
+            </div>
+          </div>
+
+          <!-- Avatar Type -->
+          <div class="details-card glass-card">
+            <h3 class="section-title">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              Avatar Info
+            </h3>
+            <div id="avatarInfo" class="avatar-info">
+              <p class="placeholder-text">No data loaded</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- API Calls Log -->
+      <section class="api-log-section">
+        <details class="api-log-details glass-card">
+          <summary class="section-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16,18 22,12 16,6"/><polyline points="8,6 2,12 8,18"/></svg>
+            API Calls Log
+            <span class="api-count" id="apiCount">0</span>
+          </summary>
+          <div id="apiLog" class="api-log"></div>
+        </details>
+      </section>
+    </div>
+
+    <!-- Fullscreen Modal -->
+    <div id="fullscreenModal" class="fullscreen-modal hidden" onclick="closeFullscreen()">
+      <div class="modal-content" onclick="event.stopPropagation()">
+        <button class="modal-close" onclick="closeFullscreen()">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <img id="fullscreenImage" src="" alt="Fullscreen view">
+        <div class="modal-actions">
+          <button class="btn-primary" id="modalDownloadBtn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download HD
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>Built with 8 Roblox APIs — <a href="https://thumbnails.roblox.com" target="_blank">Thumbnails</a> · <a href="https://users.roblox.com" target="_blank">Users</a> · <a href="https://avatar.roblox.com" target="_blank">Avatar</a></p>
+      <p class="footer-sub">Not affiliated with Roblox Corporation</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
