@@ -1,38 +1,30 @@
 /* ═══════════════════════════════════════════
-   ROBLOX AVATAR EXPLORER — App Logic
-   Multi-API Integration (8 Roblox APIs)
+   ROVIEW — Multi-API Roblox Explorer
+   Tabbed Architecture · 23+ API Endpoints
    ═══════════════════════════════════════════ */
 
 // ─── Configuration ───
 const CONFIG = {
-  // Dynamically detect local vs production vercel proxy base URL
   PROXY_BASE: (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'http://localhost:3001'
     : window.location.origin + '/api',
   USE_PROXY: true,
-  ROBLOX_APIS: {
-    users: 'https://users.roblox.com',
-    thumbnails: 'https://thumbnails.roblox.com',
-    avatar: 'https://avatar.roblox.com'
-  }
 };
 
 // ─── State ───
 let currentUserId = null;
 let currentUsername = null;
 let apiCallLog = [];
-let activePolls = {}; // Tracks timeouts for auto-polling pending thumbnails
+let activePolls = {};
+let tabDataLoaded = { overview: false, social: false, games: false, badges: false, details: false };
 
 function clearAllPolls() {
   Object.keys(activePolls).forEach(type => {
-    if (activePolls[type]) {
-      clearTimeout(activePolls[type]);
-      activePolls[type] = null;
-    }
+    if (activePolls[type]) { clearTimeout(activePolls[type]); activePolls[type] = null; }
   });
 }
 
-// ─── DOM Elements ───
+// ─── DOM ───
 const searchInput = document.getElementById('searchInput');
 const searchBtn = document.getElementById('searchBtn');
 const sizeSelect = document.getElementById('sizeSelect');
@@ -44,948 +36,568 @@ const errorState = document.getElementById('errorState');
 const errorMessage = document.getElementById('errorMessage');
 const resultsSection = document.getElementById('resultsSection');
 
-// ─── Initialize ───
+// ─── Init ───
 document.addEventListener('DOMContentLoaded', () => {
-  // Detect input type on typing
   searchInput.addEventListener('input', detectInputType);
-
-  // Search on Enter
-  searchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') performSearch();
-  });
-
-  // Search button
+  searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') performSearch(); });
   searchBtn.addEventListener('click', performSearch);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeFullscreen(); });
 
-  // Close modal on Escape
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeFullscreen();
+  // Tab switching
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => showTab(btn.dataset.tab));
   });
 });
 
-// ─── Detect Username vs ID ───
 function detectInputType() {
-  const value = searchInput.value.trim();
-  const isNumeric = /^\d+$/.test(value);
-
-  if (isNumeric && value.length > 0) {
-    inputBadge.classList.add('is-id');
-    badgeText.textContent = 'USER ID';
+  const val = searchInput.value.trim();
+  if (/^\d+$/.test(val) && val.length > 0) {
+    inputBadge.classList.add('is-id'); badgeText.textContent = 'USER ID';
   } else {
-    inputBadge.classList.remove('is-id');
-    badgeText.textContent = 'USERNAME';
+    inputBadge.classList.remove('is-id'); badgeText.textContent = 'USERNAME';
   }
 }
 
-// ─── Main Search Flow ───
+// ─── Tab System ───
+function showTab(tabName) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(s => s.classList.remove('active'));
+  
+  const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
+  const section = document.getElementById(`tab-${tabName}`);
+  if (btn) btn.classList.add('active');
+  if (section) section.classList.add('active');
+
+  // Lazy load tab data
+  if (!tabDataLoaded[tabName] && currentUserId) {
+    if (tabName === 'games') loadGamesTab();
+    if (tabName === 'badges') loadBadgesTab();
+    if (tabName === 'social') loadSocialTab();
+  }
+}
+
+// ─── Main Search ───
 async function performSearch() {
   const input = searchInput.value.trim();
-  if (!input) {
-    showError('Please enter a username or User ID');
-    return;
-  }
+  if (!input) return;
 
-  // Reset
   clearAllPolls();
-  apiCallLog = [];
   hideError();
   hideResults();
   showLoading('Searching...');
   searchBtn.disabled = true;
+  apiCallLog = [];
+  tabDataLoaded = { overview: false, social: false, games: false, badges: false, details: false };
 
   try {
-    const isNumeric = /^\d+$/.test(input);
     let userId;
-
-    if (isNumeric) {
-      // ─── Direct ID input ───
-      userId = input;
-      setLoadingText('Using User ID directly...');
+    if (/^\d+$/.test(input)) {
+      userId = parseInt(input, 10);
     } else {
-      // ─── API 1: Resolve Username → ID (via proxy) ───
       setLoadingText('Resolving username...');
       const resolveData = await proxyCall('resolve', { username: input });
-
       if (!resolveData.data || resolveData.data.length === 0) {
-        throw new Error(`User "${input}" not found. Please check the username.`);
+        throw new Error(`User "${input}" not found.`);
       }
-
       userId = resolveData.data[0].id;
       currentUsername = resolveData.data[0].name;
     }
-
     currentUserId = userId;
 
-    // ─── Fetch All Data in Parallel (via proxy) ───
     setLoadingText('Fetching profile & avatars...');
     const size = sizeSelect.value;
 
-    const safeCall = async (action, params) => {
-      try {
-        return await proxyCall(action, params);
-      } catch (e) {
-        console.warn(`Failed safe call to ${action}:`, e);
-        return null;
-      }
+    const safe = async (action, params) => {
+      try { return await proxyCall(action, params); }
+      catch (e) { console.warn(`Safe call ${action} failed:`, e); return null; }
     };
 
-    const [
-      profile,
-      headshot,
-      bust,
-      avatar,
-      wearing,
-      details,
-      presence,
-      friendsCount,
-      followersCount,
-      followingsCount,
-      friendsList,
-      groups,
-      history
-    ] = await Promise.all([
-      // API 2: User Profile
-      proxyCall('profile', { userId }),
-      // API 3: Headshot Thumbnail
-      proxyCall('thumbnail', { userId, type: 'headshot', size }),
-      // API 4: Bust Thumbnail
-      proxyCall('thumbnail', { userId, type: 'bust', size }),
-      // API 5: Full Body Thumbnail
-      proxyCall('thumbnail', { userId, type: 'avatar', size }),
-      // API 7: Currently Wearing
-      safeCall('wearing', { userId }),
-      // API 8: Avatar Details
-      safeCall('avatar-details', { userId }),
-      // New Social APIs
-      safeCall('presence', { userId }),
-      safeCall('friends-count', { userId }),
-      safeCall('followers-count', { userId }),
-      safeCall('followings-count', { userId }),
-      safeCall('friends-list', { userId }),
-      safeCall('groups', { userId }),
-      safeCall('history', { userId })
-    ]);
+    const [profile, headshot, bust, avatar, wearing, details, presence, fCount, folCount, folingCount, history] =
+      await Promise.all([
+        proxyCall('profile', { userId }),
+        proxyCall('thumbnail', { userId, type: 'headshot', size }),
+        proxyCall('thumbnail', { userId, type: 'bust', size }),
+        proxyCall('thumbnail', { userId, type: 'avatar', size }),
+        safe('wearing', { userId }),
+        safe('avatar-details', { userId }),
+        safe('presence', { userId }),
+        safe('friends-count', { userId }),
+        safe('followers-count', { userId }),
+        safe('followings-count', { userId }),
+        safe('history', { userId }),
+      ]);
 
-    // ─── Also try 3D data (API 6) ───
     let avatar3d = null;
-    try {
-      avatar3d = await proxyCall('avatar3d', { userId });
-    } catch (e) {
-      console.warn('3D avatar data not available:', e);
-    }
+    try { avatar3d = await proxyCall('avatar3d', { userId }); } catch (e) {}
 
-    // ─── Render Everything ───
     hideLoading();
     renderProfile(profile);
     renderThumbnails(headshot, bust, avatar);
     renderWearing(wearing, details);
     renderAvatarDetails(details, avatar3d);
-    
-    // Render extras
-    renderPresenceAndStats(presence, friendsCount, followersCount, followingsCount);
+    renderPresenceAndStats(presence, fCount, folCount, folingCount);
     renderUsernameHistory(history);
-    renderFriendsList(friendsList);
-    renderGroups(groups);
-
     renderApiLog();
+    tabDataLoaded.overview = true;
+    tabDataLoaded.details = true;
+
     showResults();
+    showTab('overview');
+
+    // Pre-load social tab in background
+    loadSocialTab();
 
   } catch (err) {
     hideLoading();
-    showError(err.message || 'Something went wrong. Please try again.');
+    showError(err.message || 'Something went wrong.');
     console.error('Search error:', err);
   } finally {
     searchBtn.disabled = false;
   }
 }
 
-// ─── API Call Helper ───
-async function apiCall(method, url, body = null) {
-  const startTime = performance.now();
-  const logEntry = {
-    method,
-    url,
-    status: 'pending',
-    time: 0
-  };
+// ─── Lazy Tab Loaders ───
+async function loadSocialTab() {
+  if (tabDataLoaded.social || !currentUserId) return;
+  tabDataLoaded.social = true;
+  const safe = async (a, p) => { try { return await proxyCall(a, p); } catch(e) { return null; } };
+  const [friendsList, groups] = await Promise.all([
+    safe('friends-list', { userId: currentUserId }),
+    safe('groups', { userId: currentUserId }),
+  ]);
+  renderFriendsList(friendsList);
+  renderGroups(groups);
+}
 
+async function loadGamesTab() {
+  if (tabDataLoaded.games || !currentUserId) return;
+  tabDataLoaded.games = true;
+  const grid = document.getElementById('gamesGrid');
+  grid.innerHTML = '<p class="placeholder-text">Loading experiences...</p>';
   try {
-    const options = {
-      method,
-      headers: {}
+    const gamesData = await proxyCall('user-games', { userId: currentUserId });
+    if (!gamesData || !gamesData.data || gamesData.data.length === 0) {
+      grid.innerHTML = '<p class="placeholder-text">No created experiences found</p>';
+      return;
+    }
+    const games = gamesData.data.slice(0, 12);
+    const universeIds = games.map(g => g.id).join(',');
+
+    // Fetch details and icons in parallel
+    const safe = async (a, p) => { try { return await proxyCall(a, p); } catch(e) { return null; } };
+    const [detailsData, iconsData, votesData] = await Promise.all([
+      safe('game-details', { universeIds }),
+      safe('game-icons', { universeIds }),
+      safe('game-votes', { universeIds }),
+    ]);
+
+    const detailsMap = {};
+    if (detailsData && detailsData.data) detailsData.data.forEach(d => { detailsMap[d.id] = d; });
+    const iconsMap = {};
+    if (iconsData && iconsData.data) iconsData.data.forEach(i => { iconsMap[i.targetId] = i.imageUrl; });
+    const votesMap = {};
+    if (votesData && votesData.data) votesData.data.forEach(v => { votesMap[v.id] = v; });
+
+    grid.innerHTML = games.map(game => {
+      const detail = detailsMap[game.id] || {};
+      const icon = iconsMap[game.id] || '';
+      const votes = votesMap[game.id] || {};
+      const playing = detail.playing || 0;
+      const visits = detail.visits || 0;
+      const name = detail.name || game.name || 'Unnamed';
+      const desc = detail.description || '';
+      const rootPlaceId = detail.rootPlaceId || (game.rootPlace ? game.rootPlace.id : '');
+      const ups = votes.upVotes || 0;
+      const downs = votes.downVotes || 0;
+
+      return `
+        <div class="game-card" onclick="window.open('https://www.roblox.com/games/${rootPlaceId}','_blank')">
+          <img class="game-icon" src="${icon || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><rect width='80' height='80' fill='%231f1f1f'/></svg>"}" alt="${name}">
+          <div class="game-info">
+            <span class="game-name">${escapeHtml(name)}</span>
+            <div class="game-stats">
+              <span class="game-stat playing">▶ ${fmtNum(playing)} playing</span>
+              <span class="game-stat">👁 ${fmtNum(visits)} visits</span>
+              <span class="game-stat">👍 ${fmtNum(ups)}</span>
+              <span class="game-stat">👎 ${fmtNum(downs)}</span>
+            </div>
+            <span class="game-description">${escapeHtml(desc.substring(0, 100))}</span>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    console.error('Games tab error:', e);
+    grid.innerHTML = '<p class="placeholder-text">Failed to load games</p>';
+  }
+}
+
+async function loadBadgesTab() {
+  if (tabDataLoaded.badges || !currentUserId) return;
+  tabDataLoaded.badges = true;
+  const grid = document.getElementById('badgesGrid');
+  grid.innerHTML = '<p class="placeholder-text">Loading badges...</p>';
+  try {
+    const badges = await proxyCall('roblox-badges', { userId: currentUserId });
+    if (!badges || !Array.isArray(badges) || badges.length === 0) {
+      grid.innerHTML = '<p class="placeholder-text">No Roblox platform badges earned</p>';
+      return;
+    }
+
+    // Map badge IDs to icon URLs
+    const badgeIcons = {
+      1: 'https://images.rbxcdn.com/5eb3f21b804c8c290ff44b5d5b3e9e53.png',   // Admin
+      2: 'https://images.rbxcdn.com/17c8873550a84ffb0a4e4341c9b5f6e1.png',   // Ambassador
+      3: 'https://images.rbxcdn.com/f72d07e5f33e22a00c45ef3f329a8e7d.png',   // Combat Initiation
+      4: 'https://images.rbxcdn.com/be4c53b88fda3d02b7d2ee50c0258c26.png',   // Warrior
+      5: 'https://images.rbxcdn.com/f5a7c099d5e49bc07f5b95ed49eb2f27.png',   // Inviter
+      6: 'https://images.rbxcdn.com/04867003b08abe5aa93c3ed64b6b2eb2.png',   // Friendship
+      7: 'https://images.rbxcdn.com/6dd3a2f4d0cd1e5bdd5a0de1b3af8f8c.png',   // Bloxxer
+      8: 'https://images.rbxcdn.com/ee7d92cd54ea39e5cd37dcc49fdbb533.png',   // Bricksmith
+      9: 'https://images.rbxcdn.com/ffea8e0c54a244c92c86d72e49cbb9d5.png',   // Builders Club (BC)
+      10: 'https://images.rbxcdn.com/3ee05fb0875e4fc228432e28413cde97.png',  // Turbo BC
+      11: 'https://images.rbxcdn.com/1fb3c5e69c6c3ee7d0aa5ae9d77ec5c3.png',  // Outrageous BC
+      12: 'https://images.rbxcdn.com/23e6c1b8a49759ee29a68cf73f7ed1b1.png',  // Homestead
+      14: 'https://images.rbxcdn.com/e8ede7f3af7a7c2ea11c94b65b9ef8c9.png',  // Official Model Maker
+      15: 'https://images.rbxcdn.com/18d52cf1b6e0d6bb40c6e00d5c6c4e34.png',  // Welcome To The Club
+      17: 'https://images.rbxcdn.com/82aee1e7ca3b78be6dcb2b3d0aafbced.png',  // Veteran
+      18: 'https://images.rbxcdn.com/58b51f62e27e8cbbca3c90f2ec41a6a6.png',  // Premium
     };
 
-    if (body) {
-      options.headers['Content-Type'] = 'application/json';
-      options.body = JSON.stringify(body);
-    }
+    grid.innerHTML = badges.map(badge => {
+      const iconUrl = badgeIcons[badge.id] || 'https://images.rbxcdn.com/82aee1e7ca3b78be6dcb2b3d0aafbced.png';
+      return `
+        <div class="badge-card">
+          <img class="badge-icon" src="${iconUrl}" alt="${escapeHtml(badge.name)}">
+          <span class="badge-name">${escapeHtml(badge.name)}</span>
+          <span class="badge-description">${escapeHtml(badge.description || '')}</span>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    console.error('Badges tab error:', e);
+    grid.innerHTML = '<p class="placeholder-text">Failed to load badges</p>';
+  }
+}
 
+// ─── API Call Helpers ───
+async function apiCall(method, url, body = null) {
+  const startTime = performance.now();
+  const logEntry = { method, url, status: 'pending', time: 0 };
+  try {
+    const options = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body) options.body = JSON.stringify(body);
     const response = await fetch(url, options);
     const elapsed = Math.round(performance.now() - startTime);
-
-    logEntry.status = response.ok ? 'ok' : 'error';
-    logEntry.statusCode = response.status;
+    logEntry.status = response.status;
     logEntry.time = elapsed;
     apiCallLog.push(logEntry);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status} ${response.statusText}`);
-    }
-
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return await response.json();
   } catch (err) {
     const elapsed = Math.round(performance.now() - startTime);
-    logEntry.status = 'error';
-    logEntry.time = elapsed;
-    logEntry.error = err.message;
+    logEntry.status = 'error'; logEntry.time = elapsed; logEntry.error = err.message;
     apiCallLog.push(logEntry);
     throw err;
   }
 }
 
-// ─── Proxy Call Helper ───
-// Routes through local proxy (localhost:3001) or Vercel proxy to avoid CORS
 async function proxyCall(action, params = {}) {
-  const queryParts = [`action=${action}`];
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null) {
-      queryParts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
-    }
-  }
-  const proxyUrl = `${CONFIG.PROXY_BASE}?${queryParts.join('&')}`;
-
-  // Map action to the actual Roblox endpoint for the log display
-  const robloxEndpointMap = {
-    resolve: 'POST users.roblox.com/v1/usernames/users',
-    profile: `GET users.roblox.com/v1/users/${params.userId}`,
-    thumbnail: `GET thumbnails.roblox.com/v1/users/avatar-${params.type || 'headshot'}`,
-    avatar3d: `GET thumbnails.roblox.com/v1/users/avatar-3d`,
-    wearing: `GET avatar.roblox.com/v1/users/${params.userId}/currently-wearing`,
-    'avatar-details': `GET avatar.roblox.com/v2/avatar/users/${params.userId}/avatar`
-  };
-
-  const startTime = performance.now();
-  const logEntry = {
-    method: action === 'resolve' ? 'POST' : 'GET',
-    url: robloxEndpointMap[action] || proxyUrl,
-    status: 'pending',
-    time: 0
-  };
-
-  try {
-    const response = await fetch(proxyUrl);
-    const elapsed = Math.round(performance.now() - startTime);
-
-    logEntry.status = response.ok ? 'ok' : 'error';
-    logEntry.statusCode = response.status;
-    logEntry.time = elapsed;
-    apiCallLog.push(logEntry);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status} ${response.statusText}`);
-    }
-
-    return await response.json();
-  } catch (err) {
-    const elapsed = Math.round(performance.now() - startTime);
-    logEntry.status = 'error';
-    logEntry.time = elapsed;
-    logEntry.error = err.message;
-    apiCallLog.push(logEntry);
-    throw err;
-  }
+  const queryParams = new URLSearchParams({ action, ...params });
+  return await apiCall('GET', `${CONFIG.PROXY_BASE}?${queryParams}`);
 }
 
 // ─── Render Profile ───
 function renderProfile(profile) {
   if (!profile || profile.errors) return;
-
-  // Set headshot as profile avatar
-  document.getElementById('profileAvatar').src =
-    `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${profile.id}&size=150x150&format=Png&isCircular=true`;
-  // Use a proper image - we'll load it via a fetch
   loadProfileAvatar(profile.id);
-
   document.getElementById('displayName').textContent = profile.displayName || profile.name;
   document.getElementById('userName').textContent = `@${profile.name}`;
   document.getElementById('userDescription').textContent = profile.description || 'No description';
   document.getElementById('userIdDisplay').textContent = profile.id;
-
-  // Format date
   if (profile.created) {
-    const date = new Date(profile.created);
-    const options = { year: 'numeric', month: 'long', day: 'numeric' };
-    document.getElementById('userCreated').textContent = date.toLocaleDateString('en-US', options);
+    const d = new Date(profile.created);
+    document.getElementById('userCreated').textContent = d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   }
-
-  // Banned badge
-  const bannedBadge = document.getElementById('bannedBadge');
-  if (profile.isBanned) {
-    bannedBadge.style.display = 'flex';
-  } else {
-    bannedBadge.style.display = 'none';
-  }
+  document.getElementById('bannedBadge').style.display = profile.isBanned ? 'flex' : 'none';
 }
 
-// Load profile avatar image via proxy
 async function loadProfileAvatar(userId) {
   try {
     const data = await proxyCall('thumbnail', { userId, type: 'headshot', size: '150x150' });
-    if (data.data && data.data[0] && data.data[0].imageUrl) {
+    if (data && data.data && data.data[0] && data.data[0].imageUrl) {
       document.getElementById('profileAvatar').src = data.data[0].imageUrl;
     }
-  } catch (e) {
-    console.warn('Failed to load profile avatar:', e);
-  }
+  } catch (e) {}
 }
 
 // ─── Render Thumbnails ───
 function renderThumbnails(headshot, bust, avatar) {
-  renderSingleThumb('headshot', headshot);
-  renderSingleThumb('bust', bust);
-  renderSingleThumb('avatar', avatar);
+  processThumbnail(headshot, 'headshotImg', 'headshotStatus', 'headshot');
+  processThumbnail(bust, 'bustImg', 'bustStatus', 'bust');
+  processThumbnail(avatar, 'avatarImg', 'avatarStatus', 'avatar');
 }
 
-function renderSingleThumb(type, data) {
-  const img = document.getElementById(`${type}Img`);
-  const status = document.getElementById(`${type}Status`);
-  const card = document.getElementById(`${type}Card`);
-
-  if (data && data.data && data.data[0]) {
-    const thumbData = data.data[0];
-    
-    // Clear any existing poll for this type
-    if (activePolls[type]) {
-      clearTimeout(activePolls[type]);
-      activePolls[type] = null;
-    }
-
-    if (thumbData.state === 'Completed' && thumbData.imageUrl) {
-      img.src = thumbData.imageUrl;
-      status.textContent = `State: Completed • ${sizeSelect.value}`;
-      status.style.color = 'var(--accent)'; // Spotify Green for success
-      if (card) card.classList.remove('state-pending');
-    } else {
-      img.src = '';
-      const stateName = thumbData.state || 'Pending';
-      status.textContent = `State: ${stateName} • Rendering...`;
-      status.style.color = 'var(--warning)'; // Warning Orange for pending state
-      if (card) card.classList.add('state-pending');
-
-      // Start polling
-      startThumbnailPoll(currentUserId, type, sizeSelect.value);
-    }
+function processThumbnail(data, imgId, statusId, thumbType) {
+  const img = document.getElementById(imgId);
+  const status = document.getElementById(statusId);
+  if (!data || !data.data || !data.data[0]) {
+    status.innerHTML = '<span style="color:var(--error)">No data</span>';
+    return;
+  }
+  const item = data.data[0];
+  if (item.state === 'Completed' && item.imageUrl) {
+    img.src = item.imageUrl;
+    status.innerHTML = `<span style="color:var(--accent)">✓ Completed</span>`;
+  } else if (item.state === 'Pending') {
+    status.innerHTML = `<span style="color:var(--warning)">⏳ Rendering...</span>`;
+    pollThumbnail(thumbType, imgId, statusId);
   } else {
-    img.src = '';
-    status.textContent = 'Not available';
-    status.style.color = 'var(--error)';
-    if (card) card.classList.remove('state-pending');
+    status.innerHTML = `<span style="color:var(--error)">State: ${item.state}</span>`;
   }
 }
 
-function startThumbnailPoll(userId, type, size, attempts = 0) {
-  // Max 15 attempts (approx 35 seconds total)
-  if (attempts >= 15) {
-    const status = document.getElementById(`${type}Status`);
-    if (status) {
-      status.textContent = `State: Timeout • Failed to render`;
-      status.style.color = 'var(--error)';
-    }
-    const card = document.getElementById(`${type}Card`);
-    if (card) card.classList.remove('state-pending');
+function pollThumbnail(thumbType, imgId, statusId, attempt = 0) {
+  if (attempt >= 10) {
+    document.getElementById(statusId).innerHTML = '<span style="color:var(--error)">Timeout</span>';
     return;
   }
-
-  // Clear previous timeout if any
-  if (activePolls[type]) {
-    clearTimeout(activePolls[type]);
-  }
-
-  activePolls[type] = setTimeout(async () => {
-    // Stop if user context changed in the meantime
-    if (currentUserId !== userId) {
-      return;
-    }
-
+  activePolls[thumbType] = setTimeout(async () => {
     try {
-      const data = await proxyCall('thumbnail', { userId, type, size });
+      const data = await proxyCall('thumbnail', { userId: currentUserId, type: thumbType, size: sizeSelect.value });
       if (data && data.data && data.data[0]) {
-        const thumbData = data.data[0];
-        const img = document.getElementById(`${type}Img`);
-        const status = document.getElementById(`${type}Status`);
-        const card = document.getElementById(`${type}Card`);
-
-        if (thumbData.state === 'Completed' && thumbData.imageUrl) {
-          if (img) img.src = thumbData.imageUrl;
-          if (status) {
-            status.textContent = `State: Completed • ${size}`;
-            status.style.color = 'var(--accent)';
-          }
-          if (card) card.classList.remove('state-pending');
-          activePolls[type] = null;
-        } else {
-          // Still pending, retry
-          if (status) {
-            status.textContent = `State: ${thumbData.state || 'Pending'} • Rendering...`;
-          }
-          startThumbnailPoll(userId, type, size, attempts + 1);
+        const item = data.data[0];
+        if (item.state === 'Completed' && item.imageUrl) {
+          document.getElementById(imgId).src = item.imageUrl;
+          document.getElementById(statusId).innerHTML = '<span style="color:var(--accent)">✓ Completed</span>';
+          return;
         }
-      } else {
-        startThumbnailPoll(userId, type, size, attempts + 1);
       }
-    } catch (e) {
-      console.warn(`Polling error for ${type}:`, e);
-      startThumbnailPoll(userId, type, size, attempts + 1);
-    }
-  }, 2500); // Poll every 2.5s
+    } catch (e) {}
+    pollThumbnail(thumbType, imgId, statusId, attempt + 1);
+  }, 2000);
 }
 
-// ─── Render Currently Wearing ───
-function renderWearing(data, avatarDetails) {
-  const container = document.getElementById('wearingList');
-
-  if (!data || !data.assetIds || data.assetIds.length === 0) {
-    container.innerHTML = '<p class="placeholder-text">No items being worn</p>';
-    return;
+// ─── Render Wearing & Details ───
+function renderWearing(wearing, details) {
+  const list = document.getElementById('wearingList');
+  if (!list) return;
+  if (wearing && wearing.assetIds && wearing.assetIds.length > 0) {
+    list.innerHTML = wearing.assetIds.map(id =>
+      `<a href="https://www.roblox.com/catalog/${id}" target="_blank" class="wearing-item">
+        <span class="wearing-id">${id}</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </a>`).join('');
+    // Try loading asset thumbnails
+    loadAssetThumbnails(wearing.assetIds.slice(0, 20));
+  } else {
+    list.innerHTML = '<p class="placeholder-text">No items currently worn</p>';
   }
-
-  // Build asset name map from avatar details
-  const assetNameMap = {};
-  if (avatarDetails && avatarDetails.assets) {
-    avatarDetails.assets.forEach(asset => {
-      assetNameMap[asset.id] = {
-        name: asset.name,
-        type: asset.assetType ? asset.assetType.name : 'Unknown'
-      };
-    });
-  }
-
-  container.innerHTML = data.assetIds.map(assetId => {
-    const assetInfo = assetNameMap[assetId];
-    const displayName = assetInfo ? assetInfo.name : `Asset #${assetId}`;
-    const typeBadge = assetInfo ? `<span class="wearing-type">${assetInfo.type}</span>` : '';
-    return `
-      <div class="wearing-item">
-        <img class="wearing-item-icon"
-             src=""
-             alt="Asset ${assetId}"
-             onerror="this.style.display='none'">
-        <div class="wearing-item-info">
-          <a href="https://www.roblox.com/catalog/${assetId}" target="_blank" rel="noopener">
-            ${displayName}
-          </a>
-          ${typeBadge}
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  // Load proper thumbnails for each asset
-  loadAssetThumbnails(data.assetIds);
 }
 
 async function loadAssetThumbnails(assetIds) {
   try {
-    // Batch load asset thumbnails
-    const batchSize = 50;
-    for (let i = 0; i < assetIds.length; i += batchSize) {
-      const batch = assetIds.slice(i, i + batchSize);
-      const idsParam = batch.join(',');
-      const response = await fetch(
-        `https://thumbnails.roblox.com/v1/assets?assetIds=${idsParam}&size=75x75&format=Png&isCircular=false`
-      );
-      const data = await response.json();
-
-      if (data.data) {
-        data.data.forEach(item => {
-          if (item.imageUrl) {
-            const imgEl = document.querySelector(`.wearing-item-icon[alt="Asset ${item.targetId}"]`);
-            if (imgEl) {
-              imgEl.src = item.imageUrl;
-              imgEl.style.display = 'block';
-            }
-          }
-        });
-      }
+    const data = await proxyCall('asset-thumbnail', { assetIds: assetIds.join(',') });
+    if (data && data.data) {
+      data.data.forEach(item => {
+        const el = document.querySelector(`.wearing-item[href*="/${item.targetId}"] .wearing-id`);
+        if (el && item.imageUrl) {
+          el.innerHTML = `<img src="${item.imageUrl}" style="width:24px;height:24px;border-radius:4px;vertical-align:middle;margin-right:4px"> ${item.targetId}`;
+        }
+      });
     }
-  } catch (e) {
-    console.warn('Failed to load asset thumbnails:', e);
-  }
+  } catch (e) {}
 }
 
-// ─── Render Avatar Details ───
 function renderAvatarDetails(details, avatar3d) {
-  renderBodyColors(details);
-  renderScales(details);
-  renderAvatarInfo(details, avatar3d);
-}
-
-// Roblox BrickColor ID → approximate hex color map (most common ones)
-const BRICK_COLOR_MAP = {
-  1: '#F2F3F3', 5: '#D7C59A', 9: '#E8BAC8', 11: '#80BBDB',
-  18: '#CC8E69', 21: '#C4281C', 23: '#0D69AC', 24: '#F5CD30',
-  26: '#1B2A35', 28: '#287F47', 29: '#A1C48C', 36: '#F3CF9B',
-  37: '#4B974A', 38: '#A05F34', 39: '#C1CADE', 40: '#ECECEC',
-  41: '#CD312E', 42: '#5BC4BE', 43: '#00639B', 44: '#F5F1D0',
-  45: '#6D81AD', 100: '#EEA4A4', 101: '#DA867A', 102: '#6B5A5A',
-  103: '#C6C1C1', 104: '#6B327C', 105: '#E29B40', 106: '#DA8541',
-  107: '#008F9C', 108: '#685C42', 110: '#435493', 111: '#BFB7B1',
-  112: '#6C81B7', 113: '#E5ADC8', 115: '#C7D23C', 116: '#55A5AF',
-  118: '#97CBD9', 119: '#84B68D', 120: '#D9E4A7', 121: '#E7C09D',
-  123: '#D6922B', 124: '#958A73', 125: '#94837D', 126: '#A0A5A9',
-  127: '#DCBC81', 128: '#AE7A59', 131: '#9CA3A8', 133: '#D5733D',
-  134: '#D8C400', 135: '#9EA3B0', 136: '#87818B', 137: '#E4ADC7',
-  138: '#BBC4AE', 140: '#27462E', 141: '#3F5437', 143: '#CFE2F7',
-  145: '#7988A1', 146: '#7D898F', 147: '#575857', 148: '#505050',
-  149: '#3B3B3B', 150: '#585858', 151: '#0F1012', 153: '#6C6E6E',
-  154: '#7F2021', 157: '#FFD000', 158: '#F6A500', 168: '#A8967E',
-  176: '#897E79', 178: '#B99272', 179: '#635F62', 180: '#D9B384',
-  190: '#F2D063', 191: '#E08432', 192: '#6F2D31', 193: '#CF2E31',
-  194: '#A3A2A5', 195: '#4C5156', 196: '#697082', 198: '#8E4285',
-  199: '#3A2832', 200: '#828A5D', 201: '#84573B', 202: '#B05820',
-  203: '#967E76', 204: '#8A9EBC', 205: '#A1A5A2', 206: '#C3BD6F',
-  207: '#8E793E', 208: '#CFD5CD', 209: '#B3916E', 210: '#727A6A',
-  211: '#6F7B97', 212: '#B5CBDB', 213: '#6F816D', 216: '#83381F',
-  217: '#7D695F', 218: '#593939', 219: '#5E2F3D', 220: '#A5D152',
-  221: '#E1A3CF', 222: '#EDC8A4', 223: '#DAB000', 224: '#F0E890',
-  225: '#F4A550', 226: '#F9E999', 232: '#7DBBD2', 268: '#342B75',
-  301: '#506D54', 302: '#5F7954', 303: '#65462C', 304: '#82533C',
-  305: '#60727C', 306: '#5F6D7B', 307: '#494D52', 308: '#4F4D53',
-  309: '#E3DCC7', 310: '#CF9F6D', 311: '#555E68', 312: '#606060',
-  313: '#ABB9C6', 314: '#B2CCDB', 315: '#9DC4D9', 316: '#B28A70',
-  317: '#93896B', 318: '#86895C', 319: '#A4BD47', 320: '#D8DD56',
-  321: '#C4A06B', 322: '#C7AC78', 323: '#E6D2A7', 324: '#C6C8A7',
-  325: '#B8C4BC', 326: '#C7BCA1', 327: '#9B9A8A', 328: '#A39D8A',
-  329: '#C4C3D0', 330: '#C6C7CF', 331: '#E7DFCA', 332: '#F7F3DE',
-  333: '#E0D1B7', 334: '#F0E6B9', 335: '#E0D1AF', 336: '#EEE1C1',
-  337: '#E5DDC0', 338: '#E6E1C8', 339: '#D1C2A3', 340: '#D8B88D',
-  341: '#CAA76A', 342: '#DFC59A', 343: '#E3C68C', 344: '#E6D0AB',
-  345: '#E8D4B0', 346: '#D6BF91', 347: '#CFA467', 348: '#BD9667',
-  349: '#CC9E6B', 350: '#D3A46A', 351: '#D6A465', 352: '#CB8444',
-  353: '#C37230', 354: '#BC6D34', 355: '#D09B5F', 356: '#F0D77A',
-  357: '#E7CA65', 358: '#E2BD60', 359: '#ECC87E', 360: '#E2C560',
-  361: '#CCB64F', 362: '#CFB252', 363: '#D5C15B',
-  1001: '#F8F8F8', 1002: '#CDCDCD', 1003: '#111111',
-  1004: '#FF0000', 1005: '#FFB000', 1006: '#B480FF',
-  1007: '#A34B4B', 1008: '#C1BE42', 1009: '#FFFF00',
-  1010: '#0000FF', 1011: '#002060', 1012: '#2154B9',
-  1013: '#04AFEC', 1014: '#AA5500', 1015: '#AA00AA',
-  1016: '#FF66CC', 1017: '#FFAF00', 1018: '#12EED4',
-  1019: '#00FFFF', 1020: '#FF0000', 1021: '#FF6600',
-  1022: '#B1A7FF', 1023: '#00B8FF', 1024: '#00FFB0',
-  1025: '#FFFF9E', 1026: '#CF9CFF', 1027: '#E1A479',
-  1028: '#CC8833', 1029: '#FFBB55', 1030: '#AABB22',
-  1031: '#EEDD55', 1032: '#77DDEE',
-};
-
-function getBrickColor(colorId) {
-  return BRICK_COLOR_MAP[colorId] || '#888888';
-}
-
-function renderBodyColors(details) {
-  const container = document.getElementById('bodyColors');
-
-  // v2 API returns bodyColor3s (hex strings) not bodyColors (BrickColor IDs)
-  const colors3 = details ? details.bodyColor3s : null;
-  const colorsLegacy = details ? details.bodyColors : null;
-
-  if (!colors3 && !colorsLegacy) {
-    container.innerHTML = '<p class="placeholder-text">Body colors not available</p>';
-    return;
+  // Scales
+  const scalesEl = document.getElementById('avatarScales');
+  if (scalesEl && details && details.scales) {
+    const s = details.scales;
+    scalesEl.innerHTML = Object.entries(s).map(([key, val]) =>
+      `<div class="scale-item"><span class="scale-label">${key}</span><div class="scale-bar-container"><div class="scale-bar" style="width:${Math.round(val * 100)}%"></div></div><span class="scale-value">${val.toFixed(2)}</span></div>`
+    ).join('');
   }
 
-  let colorParts;
-
-  if (colors3) {
-    // v2 API: hex color strings (e.g., "A3A2A5")
-    colorParts = [
-      { label: 'Head', hex: `#${colors3.headColor3}` },
-      { label: 'Torso', hex: `#${colors3.torsoColor3}` },
-      { label: 'Left Arm', hex: `#${colors3.leftArmColor3}` },
-      { label: 'Right Arm', hex: `#${colors3.rightArmColor3}` },
-      { label: 'Left Leg', hex: `#${colors3.leftLegColor3}` },
-      { label: 'Right Leg', hex: `#${colors3.rightLegColor3}` }
-    ];
-  } else {
-    // Fallback: BrickColor IDs
-    colorParts = [
-      { label: 'Head', hex: getBrickColor(colorsLegacy.headColorId) },
-      { label: 'Torso', hex: getBrickColor(colorsLegacy.torsoColorId) },
-      { label: 'Left Arm', hex: getBrickColor(colorsLegacy.leftArmColorId) },
-      { label: 'Right Arm', hex: getBrickColor(colorsLegacy.rightArmColorId) },
-      { label: 'Left Leg', hex: getBrickColor(colorsLegacy.leftLegColorId) },
-      { label: 'Right Leg', hex: getBrickColor(colorsLegacy.rightLegColorId) }
-    ];
-  }
-
-  container.innerHTML = colorParts.map(part => `
-    <div class="color-item">
-      <div class="color-swatch" style="background: ${part.hex}" title="${part.hex}"></div>
-      <span class="color-label">${part.label}</span>
-      <span class="color-hex">${part.hex}</span>
-    </div>
-  `).join('');
-}
-
-function renderScales(details) {
-  const container = document.getElementById('avatarScales');
-
-  if (!details || !details.scales) {
-    container.innerHTML = '<p class="placeholder-text">Scale data not available</p>';
-    return;
-  }
-
-  const scales = details.scales;
-  const scaleItems = [
-    { label: 'Height', value: scales.height, max: 1.05 },
-    { label: 'Width', value: scales.width, max: 1.0 },
-    { label: 'Head', value: scales.head, max: 1.0 },
-    { label: 'Depth', value: scales.depth, max: 1.0 },
-    { label: 'Proportion', value: scales.proportion, max: 1.0 },
-    { label: 'Body Type', value: scales.bodyType, max: 1.0 }
-  ];
-
-  container.innerHTML = scaleItems
-    .filter(item => item.value !== undefined)
-    .map(item => {
-      const percentage = Math.min((item.value / item.max) * 100, 100);
-      return `
-        <div class="scale-item">
-          <span class="scale-label">${item.label}</span>
-          <div class="scale-bar-wrapper">
-            <div class="scale-bar" style="width: ${percentage}%"></div>
-          </div>
-          <span class="scale-value">${item.value.toFixed(2)}</span>
-        </div>
-      `;
-    }).join('');
-}
-
-function renderAvatarInfo(details, avatar3d) {
-  const container = document.getElementById('avatarInfo');
-
-  if (!details) {
-    container.innerHTML = '<p class="placeholder-text">Avatar info not available</p>';
-    return;
-  }
-
-  let html = '';
-
-  // Player Avatar Type
-  if (details.playerAvatarType) {
-    const isR15 = details.playerAvatarType === 'R15';
-    html += `
-      <div class="info-row">
-        <span class="info-label">Avatar Type</span>
-        <span class="type-badge ${isR15 ? 'r15' : 'r6'}">${details.playerAvatarType}</span>
-      </div>
-    `;
-  }
-
-  // Default Shirt/Pants Type
-  if (details.defaultShirtApplied !== undefined) {
-    html += `
-      <div class="info-row">
-        <span class="info-label">Default Shirt</span>
-        <span class="info-value">${details.defaultShirtApplied ? 'Yes' : 'No'}</span>
-      </div>
-    `;
-  }
-
-  if (details.defaultPantsApplied !== undefined) {
-    html += `
-      <div class="info-row">
-        <span class="info-label">Default Pants</span>
-        <span class="info-value">${details.defaultPantsApplied ? 'Yes' : 'No'}</span>
-      </div>
-    `;
-  }
-
-  // Number of assets
-  if (details.assets) {
-    html += `
-      <div class="info-row">
-        <span class="info-label">Total Assets</span>
-        <span class="info-value">${details.assets.length}</span>
-      </div>
-    `;
-  }
-
-  // 3D Data available
-  html += `
-    <div class="info-row">
-      <span class="info-label">3D Data</span>
-      <span class="info-value">${avatar3d && avatar3d.imageUrl ? '✅ Available' : '❌ Not available'}</span>
-    </div>
-  `;
-
-  container.innerHTML = html || '<p class="placeholder-text">No avatar info available</p>';
-}
-
-// ─── Render API Log ───
-function renderApiLog() {
-  const container = document.getElementById('apiLog');
-  const countBadge = document.getElementById('apiCount');
-
-  countBadge.textContent = apiCallLog.length;
-
-  container.innerHTML = apiCallLog.map(entry => {
-    const statusClass = entry.status === 'ok' ? 'ok' : 'err';
-    const statusText = entry.statusCode || (entry.status === 'ok' ? '200' : 'ERR');
-
-    // Truncate URL for display
-    let displayUrl = entry.url;
-    try {
-      const urlObj = new URL(entry.url);
-      displayUrl = `${urlObj.hostname}${urlObj.pathname}${urlObj.search ? '?' + urlObj.search.substring(1, 60) + '...' : ''}`;
-    } catch (e) {
-      displayUrl = entry.url;
+  // Body Colors
+  const colorsEl = document.getElementById('bodyColors');
+  if (colorsEl && details) {
+    const c = details.bodyColors || details.bodyColor3s;
+    if (c) {
+      colorsEl.innerHTML = Object.entries(c).map(([part, colorId]) =>
+        `<div class="color-item"><span class="color-label">${part.replace('Color', '').replace('Id', '')}</span><div class="color-swatch" style="background-color:#${colorId.toString(16).padStart(6,'0')}" title="Color ID: ${colorId}"></div><span class="color-id">#${colorId}</span></div>`
+      ).join('');
+    } else {
+      colorsEl.innerHTML = '<p class="placeholder-text">No color data</p>';
     }
-
-    return `
-      <div class="api-log-entry">
-        <span class="api-method ${entry.method.toLowerCase()}">${entry.method}</span>
-        <span class="api-url" title="${entry.url}">${displayUrl}</span>
-        <span class="api-status ${statusClass}">${statusText}</span>
-        <span class="api-time">${entry.time}ms</span>
-      </div>
-    `;
-  }).join('');
-}
-
-// ─── Download Image ───
-async function downloadImage(imgId, typeName) {
-  const img = document.getElementById(imgId);
-  if (!img || !img.src || img.src === window.location.href) {
-    showError('No image to download');
-    return;
   }
 
-  try {
-    const response = await fetch(img.src);
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `roblox_${typeName}_${currentUserId || 'avatar'}_${sizeSelect.value}.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  } catch (err) {
-    // Fallback: open in new tab
-    window.open(img.src, '_blank');
+  // Avatar Info
+  const infoEl = document.getElementById('avatarInfo');
+  if (infoEl && details) {
+    let html = `<div class="info-item"><span class="info-label">Type</span><span class="info-value">${details.playerAvatarType || 'N/A'}</span></div>`;
+    if (details.defaultShirtApplied) html += `<div class="info-item"><span class="info-label">Default Shirt</span><span class="info-value">Yes</span></div>`;
+    if (details.defaultPantsApplied) html += `<div class="info-item"><span class="info-label">Default Pants</span><span class="info-value">Yes</span></div>`;
+    if (avatar3d && avatar3d.imageUrl) {
+      html += `<div class="info-item"><span class="info-label">3D Model</span><a href="${avatar3d.imageUrl}" target="_blank" class="info-link">Download OBJ</a></div>`;
+    }
+    infoEl.innerHTML = html;
   }
 }
 
-// ─── Fullscreen Modal ───
-function openFullscreen(imgId) {
-  const img = document.getElementById(imgId);
-  if (!img || !img.src) return;
-
-  const modal = document.getElementById('fullscreenModal');
-  const fullImg = document.getElementById('fullscreenImage');
-  const downloadBtn = document.getElementById('modalDownloadBtn');
-
-  fullImg.src = img.src;
-  modal.classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
-
-  // Set download button
-  downloadBtn.onclick = () => downloadImage(imgId, imgId.replace('Img', ''));
-}
-
-function closeFullscreen() {
-  const modal = document.getElementById('fullscreenModal');
-  modal.classList.add('hidden');
-  document.body.style.overflow = '';
-}
-
-// ─── UI Helpers ───
-function showLoading(text) {
-  loadingState.classList.remove('hidden');
-  loadingText.textContent = text;
-}
-
-function setLoadingText(text) {
-  loadingText.textContent = text;
-}
-
-function hideLoading() {
-  loadingState.classList.add('hidden');
-}
-
-function showError(msg) {
-  errorState.classList.remove('hidden');
-  errorMessage.textContent = msg;
-}
-
-function hideError() {
-  errorState.classList.add('hidden');
-}
-
-function showResults() {
-  resultsSection.classList.remove('hidden');
-}
-
-function hideResults() {
-  resultsSection.classList.add('hidden');
-}
-
-// ─── Render Presence & Social Stats ───
+// ─── Presence & Stats ───
 function renderPresenceAndStats(presence, friends, followers, followings) {
   const dot = document.getElementById('presenceDot');
   const text = document.getElementById('presenceText');
-
   if (dot) dot.className = 'presence-dot';
   if (text) text.className = 'presence-text-badge';
 
-  let presenceType = 0;
-  let locationName = '';
-
+  let pType = 0, loc = '';
   if (presence && presence.userPresences && presence.userPresences[0]) {
-    const p = presence.userPresences[0];
-    presenceType = p.userPresenceType;
-    locationName = p.lastLocation || '';
+    pType = presence.userPresences[0].userPresenceType;
+    loc = presence.userPresences[0].lastLocation || '';
   }
 
-  let statusClass = 'offline';
-  let statusText = 'Offline';
+  let cls = 'offline', txt = 'Offline';
+  if (pType === 1) { cls = 'online'; txt = 'Online'; }
+  else if (pType === 2) { cls = 'ingame'; txt = loc ? `Playing: ${loc}` : 'In-Game'; }
+  else if (pType === 3) { cls = 'studio'; txt = 'Developing'; }
 
-  switch (presenceType) {
-    case 1:
-      statusClass = 'online';
-      statusText = 'Online';
-      break;
-    case 2:
-      statusClass = 'ingame';
-      statusText = locationName ? `Playing: ${locationName}` : 'In-Game';
-      break;
-    case 3:
-      statusClass = 'studio';
-      statusText = 'Developing';
-      break;
-    case 4:
-      statusClass = 'ingame';
-      statusText = 'In-Game (Studio)';
-      break;
-    default:
-      statusClass = 'offline';
-      statusText = 'Offline';
-      break;
-  }
+  if (dot) dot.classList.add(cls);
+  if (text) { text.textContent = txt; text.classList.add(cls); }
 
-  if (dot) dot.classList.add(statusClass);
-  if (text) {
-    text.textContent = statusText;
-    text.classList.add(statusClass);
-  }
-
-  // Formatting social counts
-  const formatNum = (data) => {
-    return data && typeof data.count === 'number' ? new Intl.NumberFormat('en-US').format(data.count) : '0';
-  };
-
-  const fCount = formatNum(friends);
-  const folCount = formatNum(followers);
-  const folingCount = formatNum(followings);
-
-  const statsEl = document.getElementById('profileSocialStats');
-  if (statsEl) {
-    statsEl.innerHTML = `<span>${fCount}</span> Friends · <span>${folCount}</span> Followers · <span>${folingCount}</span> Following`;
-  }
+  const fmt = d => d && typeof d.count === 'number' ? new Intl.NumberFormat('en-US').format(d.count) : '0';
+  const el = document.getElementById('profileSocialStats');
+  if (el) el.innerHTML = `<span>${fmt(friends)}</span> Friends · <span>${fmt(followers)}</span> Followers · <span>${fmt(followings)}</span> Following`;
 }
 
-// ─── Render Username History ───
 function renderUsernameHistory(history) {
-  const container = document.getElementById('usernameHistory');
   const listEl = document.getElementById('usernameHistoryList');
-  if (!container || !listEl) return;
-
+  if (!listEl) return;
   if (history && history.data && history.data.length > 0) {
-    const names = history.data.map(item => item.name).join(', ');
-    listEl.textContent = names;
-    container.style.display = 'block';
+    // Deduplicate names
+    const names = [...new Set(history.data.map(i => i.name))];
+    listEl.innerHTML = names.map(name => `<span class="history-badge">${escapeHtml(name)}</span>`).join('');
   } else {
-    listEl.textContent = 'None';
-    container.style.display = 'block';
+    listEl.innerHTML = '<span class="history-badge none">None</span>';
   }
 }
 
-// ─── Render Friends (Related Users) ───
+// ─── Friends & Groups ───
 async function renderFriendsList(friends) {
   const grid = document.getElementById('friendsGrid');
   if (!grid) return;
-
   if (!friends || !friends.data || friends.data.length === 0) {
     grid.innerHTML = '<p class="placeholder-text">No friends to display</p>';
     return;
   }
-
-  // Display top 6 friends
   const items = friends.data.slice(0, 6);
-  const userIds = items.map(f => f.id).join(',');
-
-  // Set placeholders
   grid.innerHTML = items.map(f => `
     <div class="friend-card" onclick="document.getElementById('searchInput').value='${f.id}'; performSearch();">
-      <img class="friend-avatar" id="friend-avatar-${f.id}" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'><rect width='80' height='80' fill='%231f1f1f'/></svg>" alt="${f.displayName}">
-      <span class="friend-display">${f.displayName}</span>
-      <span class="friend-username">@${f.name}</span>
-    </div>
-  `).join('');
+      <img class="friend-avatar" id="friend-avatar-${f.id}" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><rect width='80' height='80' fill='%231f1f1f'/></svg>" alt="${escapeHtml(f.displayName || '')}">
+      <span class="friend-display">${escapeHtml(f.displayName || f.name || 'Unknown')}</span>
+      <span class="friend-username">@${escapeHtml(f.name || '')}</span>
+    </div>`).join('');
 
   try {
+    const userIds = items.map(f => f.id).join(',');
     const thumbs = await proxyCall('thumbnail', { userId: userIds, type: 'headshot', size: '150x150' });
     if (thumbs && thumbs.data) {
       thumbs.data.forEach(t => {
         const img = document.getElementById(`friend-avatar-${t.targetId}`);
-        if (img && t.imageUrl) {
-          img.src = t.imageUrl;
-        }
+        if (img && t.imageUrl) img.src = t.imageUrl;
       });
     }
-  } catch (e) {
-    console.warn('Failed to load friends thumbnails:', e);
-  }
+  } catch (e) {}
 }
 
-// ─── Render Groups ───
 async function renderGroups(groupsData) {
   const grid = document.getElementById('groupsGrid');
   if (!grid) return;
-
   if (!groupsData || !groupsData.data || groupsData.data.length === 0) {
     grid.innerHTML = '<p class="placeholder-text">No groups joined</p>';
     return;
   }
-
-  // Display top 8 groups
   const items = groupsData.data.slice(0, 8);
-  const groupIds = items.map(item => item.group.id).join(',');
-
-  // Set placeholders
   grid.innerHTML = items.map(item => `
-    <div class="group-card" onclick="window.open('https://www.roblox.com/groups/${item.group.id}', '_blank')">
-      <img class="group-icon" id="group-icon-${item.group.id}" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><rect width='48' height='48' fill='%231f1f1f'/></svg>" alt="${item.group.name}">
+    <div class="group-card" onclick="window.open('https://www.roblox.com/groups/${item.group.id}','_blank')">
+      <img class="group-icon" id="group-icon-${item.group.id}" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48'><rect width='48' height='48' fill='%231f1f1f'/></svg>" alt="${escapeHtml(item.group.name)}">
       <div class="group-info">
-        <span class="group-name">${item.group.name}</span>
-        <span class="group-role">${item.role.name}</span>
+        <span class="group-name">${escapeHtml(item.group.name)}</span>
+        <span class="group-role">${escapeHtml(item.role.name)}</span>
       </div>
-    </div>
-  `).join('');
+    </div>`).join('');
 
   try {
+    const groupIds = items.map(i => i.group.id).join(',');
     const icons = await proxyCall('group-icons', { groupIds });
     if (icons && icons.data) {
       icons.data.forEach(icon => {
         const img = document.getElementById(`group-icon-${icon.targetId}`);
-        if (img && icon.imageUrl) {
-          img.src = icon.imageUrl;
-        }
+        if (img && icon.imageUrl) img.src = icon.imageUrl;
       });
     }
-  } catch (e) {
-    console.warn('Failed to load group icons:', e);
-  }
+  } catch (e) {}
 }
+
+// ─── Render API Log ───
+function renderApiLog() {
+  const log = document.getElementById('apiLog');
+  const count = document.getElementById('apiCount');
+  if (!log) return;
+  count.textContent = apiCallLog.length;
+  log.innerHTML = apiCallLog.map((entry, i) => {
+    const statusColor = entry.status === 200 ? 'var(--accent)' : entry.status === 'error' ? 'var(--error)' : 'var(--warning)';
+    const actionMatch = entry.url.match(/action=([^&]+)/);
+    const action = actionMatch ? actionMatch[1] : entry.method;
+    return `<div class="api-entry">
+      <span class="api-index">${i + 1}</span>
+      <span class="api-method" style="color:${statusColor}">${entry.status}</span>
+      <span class="api-action">${action}</span>
+      <span class="api-time">${entry.time}ms</span>
+    </div>`;
+  }).join('');
+}
+
+// ─── Image Utils ───
+function downloadImage(imgId, filename) {
+  const img = document.getElementById(imgId);
+  if (!img || !img.src) return;
+  const a = document.createElement('a');
+  a.href = img.src; a.download = `roview_${filename}_${currentUserId || 'unknown'}.png`;
+  a.target = '_blank'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+function openFullscreen(imgId) {
+  const img = document.getElementById(imgId);
+  if (!img || !img.src) return;
+  const modal = document.getElementById('fullscreenModal');
+  const fsImg = document.getElementById('fullscreenImage');
+  fsImg.src = img.src;
+  modal.classList.remove('hidden');
+  document.getElementById('modalDownloadBtn').onclick = () => downloadImage(imgId, 'fullscreen');
+}
+
+function closeFullscreen() {
+  document.getElementById('fullscreenModal').classList.add('hidden');
+}
+
+// ─── Helpers ───
+function fmtNum(n) {
+  if (n == null) return '0';
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return n.toString();
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function showLoading(text) { loadingState.classList.remove('hidden'); loadingText.textContent = text; }
+function setLoadingText(text) { loadingText.textContent = text; }
+function hideLoading() { loadingState.classList.add('hidden'); }
+function showError(msg) { errorState.classList.remove('hidden'); errorMessage.textContent = msg; }
+function hideError() { errorState.classList.add('hidden'); }
+function showResults() { resultsSection.classList.remove('hidden'); }
+function hideResults() { resultsSection.classList.add('hidden'); }

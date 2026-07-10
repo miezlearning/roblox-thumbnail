@@ -1417,3 +1417,252 @@ body {
   white-space: nowrap;
   width: 100%;
 }
+
+/* ─── Tab Bar (Spotify Sub-Navigation Style) ─── */
+.tab-bar {
+  display: flex;
+  gap: 12px;
+  padding: 0 var(--spacing-gutter, 24px);
+  margin-bottom: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-x: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.tab-bar::-webkit-scrollbar { display: none; }
+
+.tab-btn {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  color: var(--text-subdued) !important;
+  font-family: var(--font-family) !important;
+  font-size: 0.9rem !important;
+  font-weight: 700 !important;
+  padding: 12px 18px !important;
+  cursor: pointer !important;
+  border-bottom: 3px solid transparent !important;
+  transition: all var(--transition-fast) !important;
+  white-space: nowrap !important;
+  text-transform: capitalize !important;
+  letter-spacing: 0.02em !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.tab-btn:hover {
+  color: var(--text-base) !important;
+}
+
+.tab-btn.active {
+  color: var(--accent) !important;
+  border-bottom: 3px solid var(--accent) !important;
+}
+
+.tab-content {
+  display: none;
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* ─── Username History Badges ─── */
+.username-history-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.history-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text-subdued);
+  text-transform: uppercase;
+}
+
+.history-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.history-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  background-color: var(--bg-highlight);
+  color: var(--text-subdued);
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.history-badge:hover {
+  background-color: var(--bg-highlight-hover);
+  color: var(--text-base);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.history-badge.none {
+  background-color: transparent;
+  border: none;
+  padding: 0;
+  color: var(--text-subdued);
+}
+
+/* ─── Games Grid ─── */
+.games-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.game-card {
+  display: flex;
+  gap: 14px;
+  padding: 14px;
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-comfortable);
+  transition: background-color var(--transition-fast), transform 0.2s;
+  cursor: pointer;
+}
+
+.game-card:hover {
+  background-color: var(--bg-highlight-hover);
+  transform: translateY(-2px);
+}
+
+.game-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-standard);
+  object-fit: cover;
+  background-color: var(--bg-base);
+  flex-shrink: 0;
+}
+
+.game-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.game-name {
+  font-size: 0.875rem;
+  font-weight: 800;
+  color: var(--text-base);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-subdued);
+}
+
+.game-stat {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.game-stat .stat-icon {
+  font-size: 0.687rem;
+}
+
+.game-stat.playing {
+  color: var(--accent);
+}
+
+.game-description {
+  font-size: 0.75rem;
+  color: var(--text-subdued);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+/* ─── Badges Grid ─── */
+.badges-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.badge-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 20px 16px;
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-comfortable);
+  transition: background-color var(--transition-fast);
+}
+
+.badge-card:hover {
+  background-color: var(--bg-highlight-hover);
+}
+
+.badge-icon {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 2px 8px rgba(30, 215, 96, 0.2));
+}
+
+.badge-name {
+  font-size: 0.812rem;
+  font-weight: 800;
+  color: var(--text-base);
+  margin-bottom: 4px;
+}
+
+.badge-description {
+  font-size: 0.687rem;
+  color: var(--text-subdued);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.no-badges-message {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-subdued);
+  font-size: 0.875rem;
+}
+
+/* ─── Responsive: Tabs ─── */
+@media (max-width: 768px) {
+  .tab-btn {
+    font-size: 0.75rem;
+    padding: 10px 14px;
+  }
+  .games-grid {
+    grid-template-columns: 1fr;
+  }
+  .badges-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+

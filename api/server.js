@@ -10,7 +10,7 @@ module.exports = async (req, res) => {
     return res.status(200).end();
   }
 
-  const { action, userId, username, type, size, groupIds } = req.query;
+  const { action, userId, username, type, size, groupIds, universeIds, universeId, keyword, assetIds, assetId } = req.query;
 
   if (!action) {
     return res.status(400).json({ error: 'Missing action parameter' });
@@ -186,6 +186,56 @@ module.exports = async (req, res) => {
           return res.status(400).json({ error: 'Missing userId parameter' });
         }
         url = `https://users.roblox.com/v1/users/${userId}/username-history?limit=10&sortOrder=Desc`;
+        break;
+      }
+      case 'user-games': {
+        if (!userId) return res.status(400).json({ error: 'Missing userId parameter' });
+        url = `https://games.roblox.com/v2/users/${userId}/games?limit=25&sortOrder=Desc`;
+        break;
+      }
+      case 'game-details': {
+        if (!universeIds) return res.status(400).json({ error: 'Missing universeIds parameter' });
+        url = `https://games.roblox.com/v1/games?universeIds=${universeIds}`;
+        break;
+      }
+      case 'game-votes': {
+        if (!universeIds) return res.status(400).json({ error: 'Missing universeIds parameter' });
+        url = `https://games.roblox.com/v1/games/votes?universeIds=${universeIds}`;
+        break;
+      }
+      case 'game-favorites': {
+        if (!universeId) return res.status(400).json({ error: 'Missing universeId parameter' });
+        url = `https://games.roblox.com/v1/games/${universeId}/favorites/count`;
+        break;
+      }
+      case 'game-icons': {
+        if (!universeIds) return res.status(400).json({ error: 'Missing universeIds parameter' });
+        url = `https://thumbnails.roblox.com/v1/games/icons?universeIds=${universeIds}&size=512x512&format=Png&isCircular=false`;
+        break;
+      }
+      case 'game-media': {
+        if (!universeIds) return res.status(400).json({ error: 'Missing universeIds parameter' });
+        url = `https://thumbnails.roblox.com/v1/games/multiget/thumbnails?universeIds=${universeIds}&countPerUniverse=5&defaults=true&size=768x432&format=Png&isCircular=false`;
+        break;
+      }
+      case 'roblox-badges': {
+        if (!userId) return res.status(400).json({ error: 'Missing userId parameter' });
+        url = `https://accountinformation.roblox.com/v1/users/${userId}/roblox-badges`;
+        break;
+      }
+      case 'user-search': {
+        if (!keyword) return res.status(400).json({ error: 'Missing keyword parameter' });
+        url = `https://users.roblox.com/v1/users/search?keyword=${encodeURIComponent(keyword)}&limit=10`;
+        break;
+      }
+      case 'asset-thumbnail': {
+        if (!assetIds) return res.status(400).json({ error: 'Missing assetIds parameter' });
+        url = `https://thumbnails.roblox.com/v1/assets?assetIds=${assetIds}&size=420x420&format=Png&isCircular=false`;
+        break;
+      }
+      case 'resale-data': {
+        if (!assetId) return res.status(400).json({ error: 'Missing assetId parameter' });
+        url = `https://economy.roblox.com/v1/assets/${assetId}/resale-data`;
         break;
       }
 

@@ -84,7 +84,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   const parsed = url.parse(req.url, true);
-  const { action, userId, username, type, size, groupIds } = parsed.query;
+  const { action, userId, username, type, size, groupIds, universeIds, universeId, keyword, assetIds, assetId } = parsed.query;
 
   if (!action) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -191,6 +191,46 @@ const server = http.createServer(async (req, res) => {
       }
       case 'history': {
         targetUrl = `https://users.roblox.com/v1/users/${userId}/username-history?limit=10&sortOrder=Desc`;
+        break;
+      }
+      case 'user-games': {
+        targetUrl = `https://games.roblox.com/v2/users/${userId}/games?limit=25&sortOrder=Desc`;
+        break;
+      }
+      case 'game-details': {
+        targetUrl = `https://games.roblox.com/v1/games?universeIds=${universeIds}`;
+        break;
+      }
+      case 'game-votes': {
+        targetUrl = `https://games.roblox.com/v1/games/votes?universeIds=${universeIds}`;
+        break;
+      }
+      case 'game-favorites': {
+        targetUrl = `https://games.roblox.com/v1/games/${universeId}/favorites/count`;
+        break;
+      }
+      case 'game-icons': {
+        targetUrl = `https://thumbnails.roblox.com/v1/games/icons?universeIds=${universeIds}&size=512x512&format=Png&isCircular=false`;
+        break;
+      }
+      case 'game-media': {
+        targetUrl = `https://thumbnails.roblox.com/v1/games/multiget/thumbnails?universeIds=${universeIds}&countPerUniverse=5&defaults=true&size=768x432&format=Png&isCircular=false`;
+        break;
+      }
+      case 'roblox-badges': {
+        targetUrl = `https://accountinformation.roblox.com/v1/users/${userId}/roblox-badges`;
+        break;
+      }
+      case 'user-search': {
+        targetUrl = `https://users.roblox.com/v1/users/search?keyword=${encodeURIComponent(keyword)}&limit=10`;
+        break;
+      }
+      case 'asset-thumbnail': {
+        targetUrl = `https://thumbnails.roblox.com/v1/assets?assetIds=${assetIds}&size=420x420&format=Png&isCircular=false`;
+        break;
+      }
+      case 'resale-data': {
+        targetUrl = `https://economy.roblox.com/v1/assets/${assetId}/resale-data`;
         break;
       }
       default: {
