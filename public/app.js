@@ -243,24 +243,24 @@ async function loadBadgesTab() {
       return;
     }
 
-    // Map badge IDs to icon URLs
+    // Map badge IDs to locally-hosted assets
     const badgeIcons = {
-      1: 'https://images.rbxcdn.com/5eb3f21b804c8c290ff44b5d5b3e9e53.png',   // Admin
-      2: 'https://images.rbxcdn.com/17c8873550a84ffb0a4e4341c9b5f6e1.png',   // Ambassador
-      3: 'https://images.rbxcdn.com/f72d07e5f33e22a00c45ef3f329a8e7d.png',   // Combat Initiation
-      4: 'https://images.rbxcdn.com/be4c53b88fda3d02b7d2ee50c0258c26.png',   // Warrior
-      5: 'https://images.rbxcdn.com/f5a7c099d5e49bc07f5b95ed49eb2f27.png',   // Inviter
-      6: 'https://images.rbxcdn.com/04867003b08abe5aa93c3ed64b6b2eb2.png',   // Friendship
-      7: 'https://images.rbxcdn.com/6dd3a2f4d0cd1e5bdd5a0de1b3af8f8c.png',   // Bloxxer
-      8: 'https://images.rbxcdn.com/ee7d92cd54ea39e5cd37dcc49fdbb533.png',   // Bricksmith
-      9: 'https://images.rbxcdn.com/ffea8e0c54a244c92c86d72e49cbb9d5.png',   // Builders Club (BC)
-      10: 'https://images.rbxcdn.com/3ee05fb0875e4fc228432e28413cde97.png',  // Turbo BC
-      11: 'https://images.rbxcdn.com/1fb3c5e69c6c3ee7d0aa5ae9d77ec5c3.png',  // Outrageous BC
-      12: 'https://images.rbxcdn.com/23e6c1b8a49759ee29a68cf73f7ed1b1.png',  // Homestead
-      14: 'https://images.rbxcdn.com/e8ede7f3af7a7c2ea11c94b65b9ef8c9.png',  // Official Model Maker
-      15: 'https://images.rbxcdn.com/18d52cf1b6e0d6bb40c6e00d5c6c4e34.png',  // Welcome To The Club
-      17: 'https://images.rbxcdn.com/82aee1e7ca3b78be6dcb2b3d0aafbced.png',  // Veteran
-      18: 'https://images.rbxcdn.com/58b51f62e27e8cbbca3c90f2ec41a6a6.png',  // Premium
+      1: 'assets/badges/administrator.png',
+      2: 'assets/badges/ambassador.svg',
+      3: 'assets/badges/combat-initiation.svg',
+      4: 'assets/badges/warrior.svg',
+      5: 'assets/badges/inviter.svg',
+      6: 'assets/badges/friendship.svg',
+      7: 'assets/badges/bloxxer.png',
+      8: 'assets/badges/bricksmith.svg',
+      9: 'assets/badges/builders-club.png',
+      10: 'assets/badges/turbo-builders-club.svg',
+      11: 'assets/badges/outrageous-builders-club.svg',
+      12: 'assets/badges/homestead.png',
+      14: 'assets/badges/official-model-maker.png',
+      15: 'assets/badges/welcome-to-the-club.svg',
+      17: 'assets/badges/veteran.svg',
+      18: 'assets/badges/premium.svg',
     };
 
     grid.innerHTML = badges.map(badge => {
